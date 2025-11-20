@@ -145,3 +145,5 @@ print(s.read())
 
 s = UniversalSensor(30000, fault_type="gaussian", modulo_base=32768)
 print(s.distance(30000, 100))  # poprawnie policzy modulo
+
+print("cośtam")
