@@ -6,36 +6,115 @@ import sensor_model
 import voter_algorithms as va
 import analysis_utils as au
 
+if __name__ == '__main__':
+    # --- WSPÓLNE PARAMETRY SYMULACJI ---
+    TIME_POINTS = 200
+    AMPLITUDE = 1.0
+    BASE_NOISE = 0.05
+    TOLERANCE_PLURALITY = 0.2
 
-# ----------------------------------------------------
-# PARAMETRY SYMULACJI
-# ----------------------------------------------------
-NUM_SENSORS = 7
-TIME_POINTS = 200
-DRIFTING_SENSORS = [0, 6]  # Sensor 0 i 6 mają dryft (stałe zakłócenie)
-WEIGHTS = [0.1, 0.15, 0.2, 0.15, 0.2, 0.15, 0.05]  # Wagi dla 7 sensorów, suma musi dać 1.0
+    # Lista scenariuszy do testowania:
 
-# Generowanie danych
-nominal, data, time = sensor_model.generate_sensor_data(
-    TIME_POINTS, NUM_SENSORS,
-    noise_type='normal',
-    noise_level=0.1,
-    drift_sensors=DRIFTING_SENSORS
-)
+    # ----------------------------------------------------
+    # SCENARIUSZ A: Działanie Idealne (Baseline)
+    # ----------------------------------------------------
 
-# Obliczenie wyników algorytmów
-voter_plurality_result = va.formalized_plurality_voter(data, tolerance=0.2)
-voter_weighted_result = va.weighted_average_voter(data, weights=WEIGHTS)
+    # print("--- SCENARIUSZ A: Działanie Idealne (Tylko Szum Bazowy) ---")
+    # NUM_SENSORS = 5
+    # STATIC_WEIGHTS = [0.2, 0.2, 0.2, 0.2, 0.2] # Równe wagi
+    # DRIFTING_SENSORS = [] # Brak awarii do podświetlenia
+    #
+    # test_scenarios = [] # Brak wstrzykniętych awarii
 
-# ----------------------------------------------------
-# WYNIKI LICZBOWE
-# ----------------------------------------------------
-au.display_numerical_results(nominal, data, voter_plurality_result, voter_weighted_result, time, num_samples=5)
 
-# ----------------------------------------------------
-# ANALIZA BŁĘDÓW
-# ----------------------------------------------------
-au.calculate_and_display_mse(nominal, voter_plurality_result, voter_weighted_result)
+    # ----------------------------------------------------
+    # SCENARIUSZ B: Awarie Mniej niż 50% (Dryft + Stuck-At)
+    # ----------------------------------------------------
+
+    # print("--- SCENARIUSZ B: Realistyczny (2 z 5 sensorów z awarią) ---")
+    # NUM_SENSORS = 5
+    # STATIC_WEIGHTS = [0.1, 0.3, 0.3, 0.2, 0.1]  # Wagi celowo zróżnicowane
+    # DRIFTING_SENSORS = [0, 4]
+    #
+    # test_scenarios = [
+    #     # Sensor 0: stały duży dryft (Bias)
+    #     {'type': 'bias', 'sensors': [0], 'magnitude': 2.0},
+    #     # Sensor 4: Awaria Stuck-At-Value (Zwraca stałą 0.5)
+    #     {'type': 'stuck', 'sensors': [4], 'value': 0.5}
+    # ]
+
+    # ----------------------------------------------------
+    # SCENARIUSZ C: Awaria Większości (4 z 6 sensorów z awarią)
+    # ----------------------------------------------------
+
+    # print("--- SCENARIUSZ C: Awaria Większości (Tylko 2/6 Poprawne) ---")
+    # NUM_SENSORS = 6
+    # STATIC_WEIGHTS = [0.15, 0.15, 0.15, 0.20, 0.20, 0.15]
+    # DRIFTING_SENSORS = [0, 1, 2, 5]
+    #
+    # test_scenarios = [
+    #     # Sensor 0 i 1: duży dryft w przeciwnych kierunkach
+    #     {'type': 'bias', 'sensors': [0], 'magnitude': 2.5},
+    #     {'type': 'bias', 'sensors': [1], 'magnitude': -2.5},
+    #     # Sensor 2: Awaria Stuck-At-Value (Zwraca stałą 0.0)
+    #     {'type': 'stuck', 'sensors': [2], 'value': 0.0},
+    #     # Sensor 5: Awaria Freeze od połowy
+    #     {'type': 'freeze', 'sensors': [5], 'time_point': 100}
+    # ]
+
+
+    # ----------------------------------------------------
+    # SCENARIUSZ D: Szpilki (Test wrażliwości na pojedyncze błędy)
+    # ----------------------------------------------------
+
+    # print("--- SCENARIUSZ D: Zakłócenia Impulsowe (Spikes) ---")
+    # NUM_SENSORS = 5
+    # STATIC_WEIGHTS = [0.2, 0.2, 0.2, 0.2, 0.2]
+    # DRIFTING_SENSORS = [1, 3]
+    #
+    # test_scenarios = [
+    #     # Sensor 1 i 3: sporadyczne, silne szpilki
+    #     {'type': 'spikes', 'sensors': [1, 3], 'magnitude': 5.0, 'density': 0.01}
+    # ]
+
+
+    # ----------------------------------------------------
+    # SCENARIUSZ E: Awaria Krytyczna (Brak Konsensusu)
+    # ----------------------------------------------------
+
+    print("--- SCENARIUSZ E: Krytyczna (Dwie równe, duże grupy błędów) ---")
+    NUM_SENSORS = 6
+    STATIC_WEIGHTS = [0.1, 0.2, 0.2, 0.2, 0.2, 0.1]
+    DRIFTING_SENSORS = [0, 1, 4, 5] 
+
+    test_scenarios = [
+        # Grupa 1 (Sensory 0, 1): Duży dryft w górę
+        {'type': 'bias', 'sensors': [0, 1], 'magnitude': 3.0}, 
+        # Grupa 2 (Sensory 4, 5): Duży dryft w dół
+        {'type': 'bias', 'sensors': [4, 5], 'magnitude': -3.0} 
+        # Sensory 2, 3: Pracują poprawnie, ale są w mniejszości!
+    ]
+
+
+    # --- URUCHOMIENIE SYMULACJI (WSPÓLNE DLA WSZYSTKICH SCENARIUSZY) ---
+
+    # Generowanie danych
+    nominal, data, time = sensor_model.generate_sensor_data(
+        TIME_POINTS, NUM_SENSORS,
+        amplitude=AMPLITUDE,
+        base_noise_level=BASE_NOISE,
+        fault_scenarios=test_scenarios
+    )
+
+    # Obliczenie wyników algorytmów
+    voter_plurality_result = va.formalized_plurality_voter(data, tolerance=TOLERANCE_PLURALITY)
+    voter_weighted_result = va.weighted_average_voter(data, weights=STATIC_WEIGHTS)
+
+    # ----------------------------------------------------
+    # WYNIKI LICZBOWE I ANALIZA BŁĘDÓW (ANALYSIS_UTILS)
+    # ----------------------------------------------------
+    au.display_numerical_results(nominal, data, voter_plurality_result, voter_weighted_result, time, num_samples=5)
+    au.calculate_and_display_mse(nominal, voter_plurality_result, voter_weighted_result)
 
 # ----------------------------------------------------
 # WIZUALIZACJA (Wykresy)
@@ -48,7 +127,7 @@ plt.plot(time, nominal, 'k-', linewidth=3, label='Sygnał Nominalny (Idealny)')
 for i in range(NUM_SENSORS):
     # Podkreślenie dryfujących sensorów
     linestyle = '--' if i in DRIFTING_SENSORS else '-'
-    plt.plot(time, data[i, :], linestyle, alpha=0.6, label=f'Sensor {i} (Waga: {WEIGHTS[i]:.2f})')
+    plt.plot(time, data[i, :], linestyle, alpha=0.6, label=f'Sensor {i} (Waga: {STATIC_WEIGHTS[i]:.2f})')
 
 plt.title(f'Odczyty z {NUM_SENSORS} Sensorów (Zakłócenie Normalne + Dryft Sensorów {DRIFTING_SENSORS})', fontsize=14)
 plt.xlabel('Czas')

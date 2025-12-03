@@ -1,44 +1,64 @@
 import numpy as np
 
-def generate_sensor_data(time_points, num_sensors, amplitude=1.0, frequency=1.0, noise_type='normal', noise_level=0.1,
-                         drift_sensors=None):
-    """
-    Generuje nominalny sygnał sinusoidalny i zaszumione dane z sensorów.
 
-    :param time_points: Liczba punktów czasowych (długość sygnału).
-    :param num_sensors: Liczba symulowanych sensorów.
-    :param amplitude: Amplituda sinusa.
-    :param frequency: Częstotliwość sinusa.
-    :param noise_type: Rodzaj zakłócenia ('normal', 'bias', 'spikes').
-    :param noise_level: Poziom zakłóceń.
-    :param drift_sensors: Lista indeksów sensorów, które mają stałe zakłócenie (dryft).
-    :return: (sygnał nominalny, macierz danych z sensorów)
+def generate_sensor_data(time_points, num_sensors, amplitude=1.0, frequency=1.0,
+                         base_noise_level=0.1, fault_scenarios=None):
     """
-    # 1. Nominalny sygnał sinusoidalny
-    t = np.linspace(0, 2 * np.pi, time_points)  # Czas od 0 do 2*pi
+    Generuje nominalny sygnał sinusoidalny i zaszumione dane z sensorów
+    z możliwością symulowania różnych scenariuszy awarii.
+
+    :param base_noise_level: Poziom szumu podstawowego (losowego, normalnego).
+    :param fault_scenarios: Lista słowników definiujących awarie.
+        Typy: 'bias', 'spikes', 'stuck', 'freeze'.
+    """
+
+    t = np.linspace(0, 2 * np.pi, time_points)
     nominal_signal = amplitude * np.sin(frequency * t)
-
     sensor_data = np.zeros((num_sensors, time_points))
 
-    # 2. Generowanie danych z sensorów z zakłóceniami
     for i in range(num_sensors):
 
-        # Zakłócenie podstawowe (szum losowy)
-        random_noise = 0
-        if noise_type == 'normal':
-            random_noise = np.random.normal(0, noise_level, time_points)
-        elif noise_type == 'spikes':
-            # Symulacja krótkich, silnych zakłóceń
-            spikes = np.zeros(time_points)
-            spike_indices = np.random.choice(time_points, size=int(time_points * noise_level * 0.1), replace=False)
-            spikes[spike_indices] = np.random.uniform(2 * amplitude, 4 * amplitude, len(spike_indices))
-            random_noise = np.random.normal(0, noise_level * 0.1, time_points) + spikes
+        current_sensor_signal = np.copy(nominal_signal)
 
-        # Dodawanie dryfu (stałej wartości) do wybranych sensorów (symulacja awarii/kalibracji)
-        bias_noise = 0
-        if drift_sensors is not None and i in drift_sensors:
-            bias_noise = np.full(time_points, noise_level * 3)  # stałe przesunięcie
+        # 1. Podstawowe zakłócenie (szum normalny dla wszystkich)
+        base_noise = np.random.normal(0, base_noise_level, time_points)
+        current_sensor_signal += base_noise
 
-        sensor_data[i, :] = nominal_signal + random_noise + bias_noise
+        # 2. Awarie specyficzne dla sensora (Fault Injection)
+        if fault_scenarios:
+            for fault in fault_scenarios:
+                if i in fault.get('sensors', []):
+
+                    fault_type = fault['type']
+                    magnitude = fault.get('magnitude', 1.0)
+
+                    if fault_type == 'bias':
+                        # AWARIA: Dryft / Stałe przesunięcie
+                        current_sensor_signal += magnitude
+
+                    elif fault_type == 'stuck':
+                        # AWARIA: Stuck-At-Value (Sensor zwraca stałą wartość)
+                        stuck_value = fault.get('value', 0.0)
+                        current_sensor_signal[:] = stuck_value
+
+                    elif fault_type == 'spikes':
+                        # AWARIA: Szpilki (impulsowe zakłócenia)
+                        density = fault.get('density', 0.01)
+                        num_spikes = int(time_points * density)
+                        spike_indices = np.random.choice(time_points, size=num_spikes, replace=False)
+                        spike_values = np.random.uniform(-magnitude, magnitude, num_spikes)
+                        spike_mask = np.zeros(time_points)
+                        spike_mask[spike_indices] = spike_values
+                        current_sensor_signal += spike_mask
+
+                    elif fault_type == 'freeze':
+                        # AWARIA: Freeze Fault (trzymanie wartości z momentu awarii)
+                        freeze_start_time = fault.get('time_point', time_points // 4)
+
+                        if freeze_start_time < time_points:
+                            freeze_value = current_sensor_signal[freeze_start_time]
+                            current_sensor_signal[freeze_start_time:] = freeze_value
+
+        sensor_data[i, :] = current_sensor_signal
 
     return nominal_signal, sensor_data, t
