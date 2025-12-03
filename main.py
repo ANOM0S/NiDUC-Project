@@ -222,7 +222,9 @@ plt.show()
 error_plurality = nominal - voter_plurality_result
 error_weighted = nominal - voter_weighted_result
 
-plt.figure(figsize=(15, 5))
+plt.figure(figsize=(15, 8))
+plt.subplot(2, 1, 1)
+
 plt.plot(time, error_plurality, 'r--', label='Błąd Plurality Voter (e_P)', alpha=0.7)
 plt.plot(time, error_weighted, 'b:', label='Błąd Weighted Average Voter (e_W)', alpha=0.7)
 plt.axhline(0, color='k', linestyle='-', linewidth=1)  # Linia zero dla referencji
@@ -231,10 +233,8 @@ plt.xlabel('Czas')
 plt.ylabel('Błąd (Nominalny - Voter)')
 plt.grid(True)
 plt.legend()
-plt.tight_layout()
-plt.show()
 
-plt.figure(figsize=(15, 5))
+plt.subplot(2, 1, 2)
 
 # Histogram dla Plurality Voter
 plt.hist(error_plurality, bins=50, alpha=0.6, label='Plurality Voter', color='red', density=True)
@@ -247,26 +247,5 @@ plt.xlabel('Wielkość Błędu (e)')
 plt.ylabel('Gęstość')
 plt.legend()
 plt.grid(axis='y', alpha=0.5)
-plt.tight_layout()
-plt.show()
-
-plt.figure(figsize=(8, 8))
-
-# Rysujemy linię idealną y=x
-min_val = np.min(nominal)
-max_val = np.max(nominal)
-plt.plot([min_val, max_val], [min_val, max_val], 'k--', label='Linia Idealna (y=x)', alpha=0.8)
-
-# Wykres punktowy dla Plurality Voter
-plt.scatter(nominal, voter_plurality_result, c='red', s=10, alpha=0.5, label='Plurality Voter')
-
-# Wykres punktowy dla Weighted Average Voter
-plt.scatter(nominal, voter_weighted_result, c='blue', s=10, alpha=0.5, label='Weighted Average Voter')
-
-plt.title('Wartość Nominalna vs Wartość Oszacowana', fontsize=14)
-plt.xlabel('Wartość Nominalna')
-plt.ylabel('Wartość Oszacowana (Voter)')
-plt.grid(True)
-plt.legend()
 plt.tight_layout()
 plt.show()
