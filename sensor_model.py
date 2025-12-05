@@ -2,7 +2,7 @@ import numpy as np
 
 
 def generate_sensor_data(time_points, num_sensors, amplitude=1.0, frequency=1.0,
-                         base_noise_level=0.1, fault_scenarios=None):
+                         base_noise_level=0.05, fault_scenarios=None):
     """
     Generuje nominalny sygnał sinusoidalny i zaszumione dane z sensorów
     z możliwością symulowania różnych scenariuszy awarii.
