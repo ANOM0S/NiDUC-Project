@@ -1,6 +1,3 @@
-import matplotlib
-matplotlib.use('Qt5Agg')
-
 import matplotlib.pyplot as plt
 import sensor_model
 import voter_algorithms as va
@@ -31,17 +28,17 @@ if __name__ == '__main__':
     # SCENARIUSZ B: Awarie Mniej niż 50% (Dryft + Stuck-At)
     # ----------------------------------------------------
 
-    # print("--- SCENARIUSZ B: Realistyczny (2 z 5 sensorów z awarią) ---")
-    # NUM_SENSORS = 5
-    # STATIC_WEIGHTS = [0.1, 0.3, 0.3, 0.2, 0.1]  # Wagi celowo zróżnicowane
-    # DRIFTING_SENSORS = [0, 4]
-    #
-    # test_scenarios = [
-    #     # Sensor 0: stały duży dryft (Bias)
-    #     {'type': 'bias', 'sensors': [0], 'magnitude': 2.0},
-    #     # Sensor 4: Awaria Stuck-At-Value (Zwraca stałą 0.5)
-    #     {'type': 'stuck', 'sensors': [4], 'value': 0.5}
-    # ]
+    print("--- SCENARIUSZ B: Realistyczny (2 z 5 sensorów z awarią) ---")
+    NUM_SENSORS = 5
+    STATIC_WEIGHTS = [0.1, 0.3, 0.3, 0.2, 0.1]  # Wagi celowo zróżnicowane
+    DRIFTING_SENSORS = [0, 4]
+
+    test_scenarios = [
+        # Sensor 0: stały duży dryft (Bias)
+        {'type': 'bias', 'sensors': [0], 'magnitude': 2.0},
+        # Sensor 4: Awaria Stuck-At-Value (Zwraca stałą 0.5)
+        {'type': 'stuck', 'sensors': [4], 'value': 0.5}
+    ]
 
     # ----------------------------------------------------
     # SCENARIUSZ C: Awaria Większości (4 z 6 sensorów z awarią)
@@ -82,18 +79,18 @@ if __name__ == '__main__':
     # SCENARIUSZ E: Awaria Krytyczna (Brak Konsensusu)
     # ----------------------------------------------------
 
-    print("--- SCENARIUSZ E: Krytyczna (Dwie równe, duże grupy błędów) ---")
-    NUM_SENSORS = 6
-    STATIC_WEIGHTS = [0.1, 0.2, 0.2, 0.2, 0.2, 0.1]
-    DRIFTING_SENSORS = [0, 1, 4, 5] 
-
-    test_scenarios = [
-        # Grupa 1 (Sensory 0, 1): Duży dryft w górę
-        {'type': 'bias', 'sensors': [0, 1], 'magnitude': 3.0}, 
-        # Grupa 2 (Sensory 4, 5): Duży dryft w dół
-        {'type': 'bias', 'sensors': [4, 5], 'magnitude': -3.0} 
-        # Sensory 2, 3: Pracują poprawnie, ale są w mniejszości!
-    ]
+    # print("--- SCENARIUSZ E: Krytyczna (Dwie równe, duże grupy błędów) ---")
+    # NUM_SENSORS = 6
+    # STATIC_WEIGHTS = [0.1, 0.2, 0.2, 0.2, 0.2, 0.1]
+    # DRIFTING_SENSORS = [0, 1, 4, 5]
+    #
+    # test_scenarios = [
+    #     # Grupa 1 (Sensory 0, 1): Duży dryft w górę
+    #     {'type': 'bias', 'sensors': [0, 1], 'magnitude': 3.0},
+    #     # Grupa 2 (Sensory 4, 5): Duży dryft w dół
+    #     {'type': 'bias', 'sensors': [4, 5], 'magnitude': -3.0}
+    #     # Sensory 2, 3: Pracują poprawnie, ale są w mniejszości!
+    # ]
 
 
     # --- URUCHOMIENIE SYMULACJI (WSPÓLNE DLA WSZYSTKICH SCENARIUSZY) ---
