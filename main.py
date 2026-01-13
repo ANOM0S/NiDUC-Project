@@ -104,34 +104,43 @@ if __name__ == '__main__':
 
     # --- OBLICZENIA VOTERÓW ---
 
-    # 1. Plurality (Oblicza wektorowo wewnątrz funkcji)
+    # 1. Plurality (Wektorowo)
     res_plurality = va.formalized_plurality_voter(data, tolerance=TOLERANCE_PLURALITY)
 
-    # 2. Weighted (Oblicza wektorowo wewnątrz funkcji)
-    res_weighted = va.weighted_average_voter(data, weights=STATIC_WEIGHTS)
+    # 2. Weighted Static (Wektorowo - wagi stałe)
+    res_weighted_static = va.weighted_average_voter(data, weights=STATIC_WEIGHTS)
 
-    # 3. N z M (Musimy obliczyć w pętli dla każdego punktu czasu)
+    # Inicjalizacja list dla algorytmów liczonych w pętli
     res_nzm = []
-    for t_idx in range(TIME_POINTS):
-        readings = data[:, t_idx]
-        # Dla 3 sensorów, m_to_keep=2 oznacza odrzucenie 1 skrajnego
-        val = va.n_z_m_voter(readings, m_to_keep=2)
-        res_nzm.append(val)
-    res_nzm = np.array(res_nzm)
-
-    # 4. Smoothing (Musimy obliczyć w pętli z pamięcią)
     res_smoothing = []
-    prev_val = None
+    res_dynamic_weighted = []  # <--- NOWA LISTA
+
+    prev_val_smooth = None
+
     for t_idx in range(TIME_POINTS):
         readings = data[:, t_idx]
-        val = va.smoothing_voter(readings, prev_val, alpha=0.15)  # alpha mała = mocne wygładzanie
-        prev_val = val
-        res_smoothing.append(val)
-    res_smoothing = np.array(res_smoothing)
 
-    # --- ANALIZA WYNIKÓW ---
-    au.display_numerical_results(nominal, data, res_plurality, res_weighted, res_nzm, res_smoothing, time)
-    au.calculate_and_display_mse(nominal, res_plurality, res_weighted, res_nzm, res_smoothing)
+        # 3. N z M
+        val_nzm = va.n_z_m_voter(readings, m_to_keep=2)
+        res_nzm.append(val_nzm)
+
+        # 4. Smoothing
+        val_smooth = va.smoothing_voter(readings, prev_val_smooth, alpha=0.15)
+        prev_val_smooth = val_smooth
+        res_smoothing.append(val_smooth)
+
+        # 5. DYNAMIC WEIGHTED (Brøn) <--- TU DODAJEMY WYWOŁANIE
+        # Parametr 'a' decyduje o czułości. Mniejsze 'a' = mocniejsze karanie za błędy.
+        val_dynamic = va.weighted_average_dynamic_bron(readings, a=0.5)
+        res_dynamic_weighted.append(val_dynamic)
+
+    # Konwersja na numpy array
+    res_nzm = np.array(res_nzm)
+    res_smoothing = np.array(res_smoothing)
+    res_dynamic_weighted = np.array(res_dynamic_weighted)
+
+    # --- ANALIZA WYNIKÓW (Możesz zaktualizować funkcje w analysis_utils, żeby przyjmowały 5 argumentów, albo pominąć to tutaj) ---
+    # au.calculate_and_display_mse(...)
 
     # --- WYKRESY ---
     plt.figure(figsize=(14, 10))
@@ -139,26 +148,27 @@ if __name__ == '__main__':
     # Panel 1: Sensory
     plt.subplot(2, 1, 1)
     plt.plot(time, nominal, 'k--', linewidth=2, label='Nominalny', alpha=0.8)
-    colors = ['gray', 'silver', 'lightgray']
     for i in range(NUM_SENSORS):
         style = ':' if i in DRIFTING_SENSORS else '-'
-        lw = 2 if i in DRIFTING_SENSORS else 1
-        plt.plot(time, data[i, :], color=colors[i % 3], linestyle=style, linewidth=lw, label=f'Sensor {i}')
-
+        plt.plot(time, data[i, :], linestyle=style, alpha=0.5, label=f'Sensor {i}')
     plt.title(f'Dane z sensorów (Scenariusz {scenario})')
     plt.legend()
-    plt.grid(True, alpha=0.3)
+    plt.grid(True)
 
     # Panel 2: Wyniki algorytmów
     plt.subplot(2, 1, 2)
-    plt.plot(time, nominal, 'k--', linewidth=2, alpha=0.5, label='Nominalny')
+    plt.plot(time, nominal, 'k--', linewidth=3, alpha=0.3, label='Nominalny')
 
-    plt.plot(time, res_plurality, 'r-', linewidth=1.5, label='Plurality', alpha=0.8)
-    plt.plot(time, res_weighted, 'b-', linewidth=1.5, label='Weighted', alpha=0.8)
-    plt.plot(time, res_nzm, 'm-', linewidth=2, label='N-z-M (Trimmed)', alpha=0.9)
-    plt.plot(time, res_smoothing, 'orange', linewidth=2.5, label='Smoothing', alpha=0.9)
+    # Rysujemy nasze 5 algorytmów
+    plt.plot(time, res_plurality, label='Plurality', linewidth=1)
+    plt.plot(time, res_weighted_static, label='Weighted (Static)', linewidth=1)
+    plt.plot(time, res_nzm, label='N-z-M', linewidth=1)
+    plt.plot(time, res_smoothing, label='Smoothing', linewidth=1)
 
-    plt.title('Porównanie Algorytmów Głosowania')
+    # Nowy algorytm na wykresie:
+    plt.plot(time, res_dynamic_weighted, 'r--', linewidth=2, label='Dynamic Weighted (Brøn)')
+
+    plt.title('Porównanie 5 Algorytmów')
     plt.xlabel('Czas')
     plt.legend(loc='upper right')
     plt.grid(True)
