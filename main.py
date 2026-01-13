@@ -1,122 +1,100 @@
 import matplotlib
-
+# Jeśli masz błąd z Qt5Agg, zakomentuj poniższą linię:
 matplotlib.use('Qt5Agg')
 
 import matplotlib.pyplot as plt
+import numpy as np
 import sensor_model
 import voter_algorithms as va
 import analysis_utils as au
 
 if __name__ == '__main__':
-    # --- WSPÓLNE PARAMETRY SYMULACJI ---
-    TIME_POINTS = 200
+    # --- WSPÓLNE PARAMETRY ---
+    TIME_POINTS = 300
     AMPLITUDE = 1.0
     BASE_NOISE = 0.05
-    TOLERANCE_PLURALITY = 0.2
+    TOLERANCE_PLURALITY = 0.3
 
-    # Lista scenariuszy do testowania:
+    # Menu wyboru
     print(
         '''
-        scenariusz 1: Idealne działanie z szumem bazowym
+        scenariusz 1: Idealne działanie
         scenariusz 2: Awaria pojedynczego sensora (Drift)
         scenariusz 3: Awaria większości sensorów (2 na 3)
-        scenariusz 4: Awaria tzw. Szpilki (Impulsy)
-        scenariusz 5: Duży szum na wszystkich
-        scenariusz 6: Nierówne wagi (1 Główny + 2 Słabsze) - Awaria Głównego
+        scenariusz 4: Szpilki (Test dla N-z-M)
+        scenariusz 5: Duży szum wszędzie (Test dla Smoothing)
+        scenariusz 6: Nierówne wagi (Awaria Głównego)
         '''
     )
-    scenario = int(input("Wybierz scenariusz (1 - 6): "))
+    try:
+        scenario = int(input("Wybierz scenariusz (1 - 6): "))
+    except ValueError:
+        scenario = 1
 
+    # --- KONFIGURACJA SCENARIUSZY ---
     match scenario:
         case 1:
-            # --- SCENARIUSZ 1: IDEALNE DZIAŁANIE (BASELINE) ---
-            print("--- SCENARIUSZ 1: Działanie Idealne (Tylko Szum Bazowy) ---")
-            NUM_SENSORS = 3
-            # Wagi początkowe (dla 3 sensorów po równo to ok. 0.33)
-            STATIC_WEIGHTS = [1 / 3, 1 / 3, 1 / 3]
-            DRIFTING_SENSORS = []
-            test_scenarios = []  # Brak wstrzykniętych awarii
-
-        case 2:
-            # --- SCENARIUSZ 2: POJEDYNCZA AWARIA (DRIFT) ---
-            # Testuje, czy votery potrafią zignorować jeden "odjeżdżający" sensor.
-            print("--- SCENARIUSZ 2: Awaria pojedynczego sensora (Drift) ---")
-            NUM_SENSORS = 3
-            STATIC_WEIGHTS = [1 / 3, 1 / 3, 1 / 3]
-            DRIFTING_SENSORS = [2]  # Oznaczamy sensor nr 2 jako wadliwy (dla wykresów)
-
-            test_scenarios = [
-                {'sensor_index': 2, 'fault_type': 'drift', 'params': {'drift_rate': 0.02}}
-            ]
-
-        case 3:
-            # --- SCENARIUSZ 3: AWARIA WIĘKSZOŚCI (2 z 3) ---
-            # To jest test krytyczny - system powinien zawieść, chyba że voter ma pamięć (Wygładzający).
-            print("--- SCENARIUSZ 3: Awaria większości (2 na 3 sensory wadliwe) ---")
-            NUM_SENSORS = 3
-            STATIC_WEIGHTS = [1 / 3, 1 / 3, 1 / 3]
-            DRIFTING_SENSORS = [1, 2]
-
-            test_scenarios = [
-                {'sensor_index': 1, 'fault_type': 'gaussian', 'params': {'mean': 0.5, 'std': 0.5}},
-                {'sensor_index': 2, 'fault_type': 'drift', 'params': {'drift_rate': -0.03}}
-            ]
-
-        case 4:
-            # --- SCENARIUSZ 4: SZPILKI (OUTLIERS) ---
-            # Idealny test dla algorytmu "N z M" (odrzucanie skrajnych) oraz Plurality.
-            print("--- SCENARIUSZ 4: Zakłócenia impulsowe (Szpilki) ---")
-            NUM_SENSORS = 3
-            STATIC_WEIGHTS = [1 / 3, 1 / 3, 1 / 3]
-            DRIFTING_SENSORS = [0]
-
-            test_scenarios = [
-                {'sensor_index': 0, 'fault_type': 'outlier', 'params': {'min_val': -2.0, 'max_val': 2.0, 'prob': 0.15}}
-            ]
-
-        case 5:
-            # --- SCENARIUSZ 5: DUŻY SZUM WSZĘDZIE ---
-            # Testuje jak algorytm Wygładzający radzi sobie z ogólnym chaosem.
-            print("--- SCENARIUSZ 5: Wysoki poziom szumu na wszystkich sensorach ---")
-            NUM_SENSORS = 3
-            STATIC_WEIGHTS = [1 / 3, 1 / 3, 1 / 3]
-            DRIFTING_SENSORS = [0, 1, 2]
-
-            test_scenarios = [
-                {'sensor_index': 0, 'fault_type': 'gaussian', 'params': {'mean': 0.0, 'std': 0.3}},
-                {'sensor_index': 1, 'fault_type': 'gaussian', 'params': {'mean': 0.0, 'std': 0.4}},
-                {'sensor_index': 2, 'fault_type': 'gaussian', 'params': {'mean': 0.0, 'std': 0.2}}
-            ]
-
-        case 6:
-            print("--- SCENARIUSZ 6: Nierówne wagi [0.6, 0.2, 0.2] - Awaria Sensora Głównego ---")
-            NUM_SENSORS = 3
-
-            # Główny ma 60% głosu, pomocnicze po 20%
-            STATIC_WEIGHTS = [0.6, 0.2, 0.2]
-
-            DRIFTING_SENSORS = [0]  # Awaria dotyczy sensora z największą wagą!
-
-            test_scenarios = [
-                # Sensor 0 (Master) zaczyna powoli "odpływać"
-                {'sensor_index': 0, 'fault_type': 'drift', 'params': {'drift_rate': 0.04}},
-
-                # Sensor 1 (Slave) - działa poprawnie, ale ma większy szum (bo jest tańszy)
-                {'sensor_index': 1, 'fault_type': 'gaussian', 'params': {'mean': 0.0, 'std': 0.15}},
-
-                # Sensor 2 (Slave) - działa poprawnie, ale ma większy szum
-                {'sensor_index': 2, 'fault_type': 'gaussian', 'params': {'mean': 0.0, 'std': 0.15}}
-            ]
-
-        case _:
-            print("Niepoprawny wybór, uruchamiam scenariusz domyślny (1)")
+            print("--- SCENARIUSZ 1: Baseline ---")
             NUM_SENSORS = 3
             STATIC_WEIGHTS = [1 / 3, 1 / 3, 1 / 3]
             DRIFTING_SENSORS = []
             test_scenarios = []
 
-    # --- URUCHOMIENIE SYMULACJI (WSPÓLNE DLA WSZYSTKICH SCENARIUSZY) ---
-    # Generowanie danych
+        case 2:
+            print("--- SCENARIUSZ 2: Drift jednego sensora ---")
+            NUM_SENSORS = 3
+            STATIC_WEIGHTS = [1 / 3, 1 / 3, 1 / 3]
+            DRIFTING_SENSORS = [2]
+            test_scenarios = [{'sensor_index': 2, 'fault_type': 'drift', 'params': {'drift_rate': 0.03}}]
+
+        case 3:
+            print("--- SCENARIUSZ 3: Awaria 2 z 3 sensorów ---")
+            NUM_SENSORS = 3
+            STATIC_WEIGHTS = [1 / 3, 1 / 3, 1 / 3]
+            DRIFTING_SENSORS = [1, 2]
+            test_scenarios = [
+                {'sensor_index': 1, 'fault_type': 'gaussian', 'params': {'mean': 0.5, 'std': 0.5}},
+                {'sensor_index': 2, 'fault_type': 'drift', 'params': {'drift_rate': -0.04}}
+            ]
+
+        case 4:
+            print("--- SCENARIUSZ 4: Szpilki (Outliers) ---")
+            NUM_SENSORS = 3
+            STATIC_WEIGHTS = [1 / 3, 1 / 3, 1 / 3]
+            DRIFTING_SENSORS = [0]
+            test_scenarios = [
+                {'sensor_index': 0, 'fault_type': 'outlier', 'params': {'min_val': -3.0, 'max_val': 3.0, 'prob': 0.1}}
+            ]
+
+        case 5:
+            print("--- SCENARIUSZ 5: Wysoki szum (Chaos) ---")
+            NUM_SENSORS = 3
+            STATIC_WEIGHTS = [1 / 3, 1 / 3, 1 / 3]
+            DRIFTING_SENSORS = [0, 1, 2]
+            test_scenarios = [
+                {'sensor_index': 0, 'fault_type': 'gaussian', 'params': {'mean': 0.0, 'std': 0.3}},
+                {'sensor_index': 1, 'fault_type': 'gaussian', 'params': {'mean': 0.0, 'std': 0.4}},
+                {'sensor_index': 2, 'fault_type': 'gaussian', 'params': {'mean': 0.0, 'std': 0.3}}
+            ]
+
+        case 6:
+            print("--- SCENARIUSZ 6: Heterogeniczny (Awaria Mastera) ---")
+            NUM_SENSORS = 3
+            STATIC_WEIGHTS = [0.6, 0.2, 0.2]
+            DRIFTING_SENSORS = [0]
+            test_scenarios = [
+                {'sensor_index': 0, 'fault_type': 'drift', 'params': {'drift_rate': 0.05}},
+                {'sensor_index': 1, 'fault_type': 'gaussian', 'params': {'mean': 0.0, 'std': 0.1}},
+                {'sensor_index': 2, 'fault_type': 'gaussian', 'params': {'mean': 0.0, 'std': 0.1}}
+            ]
+
+        case _:
+            NUM_SENSORS = 3
+            STATIC_WEIGHTS = [1 / 3, 1 / 3, 1 / 3]
+            DRIFTING_SENSORS = []
+            test_scenarios = []
+
+    # --- GENEROWANIE DANYCH ---
     nominal, data, time = sensor_model.generate_sensor_data(
         TIME_POINTS, NUM_SENSORS,
         amplitude=AMPLITUDE,
@@ -124,77 +102,66 @@ if __name__ == '__main__':
         fault_scenarios=test_scenarios
     )
 
-    # Obliczenie wyników algorytmów
-    voter_plurality_result = va.formalized_plurality_voter(data, tolerance=TOLERANCE_PLURALITY)
-    voter_weighted_result = va.weighted_average_voter(data, weights=STATIC_WEIGHTS)
+    # --- OBLICZENIA VOTERÓW ---
 
-    # ----------------------------------------------------
-    # WYNIKI LICZBOWE I ANALIZA BŁĘDÓW (ANALYSIS_UTILS)
-    # ----------------------------------------------------
-    au.display_numerical_results(nominal, data, voter_plurality_result, voter_weighted_result, time, num_samples=5)
-    au.calculate_and_display_mse(nominal, voter_plurality_result, voter_weighted_result)
+    # 1. Plurality (Oblicza wektorowo wewnątrz funkcji)
+    res_plurality = va.formalized_plurality_voter(data, tolerance=TOLERANCE_PLURALITY)
 
-# ----------------------------------------------------
-# WIZUALIZACJA (Wykresy)
-# ----------------------------------------------------
-plt.figure(figsize=(15, 8))
+    # 2. Weighted (Oblicza wektorowo wewnątrz funkcji)
+    res_weighted = va.weighted_average_voter(data, weights=STATIC_WEIGHTS)
 
-# 1. Wykres wszystkich odczytów i sygnału nominalnego
-plt.subplot(2, 1, 1)  # Tworzy siatkę 2 wiersze, 1 kolumna, wykres 1
-plt.plot(time, nominal, 'k-', linewidth=3, label='Sygnał Nominalny (Idealny)')
-for i in range(NUM_SENSORS):
-    # Podkreślenie dryfujących sensorów
-    linestyle = '--' if i in DRIFTING_SENSORS else '-'
-    plt.plot(time, data[i, :], linestyle, alpha=0.6, label=f'Sensor {i} (Waga: {STATIC_WEIGHTS[i]:.2f})')
+    # 3. N z M (Musimy obliczyć w pętli dla każdego punktu czasu)
+    res_nzm = []
+    for t_idx in range(TIME_POINTS):
+        readings = data[:, t_idx]
+        # Dla 3 sensorów, m_to_keep=2 oznacza odrzucenie 1 skrajnego
+        val = va.n_z_m_voter(readings, m_to_keep=2)
+        res_nzm.append(val)
+    res_nzm = np.array(res_nzm)
 
-plt.title(f'Odczyty z {NUM_SENSORS} Sensorów (Zakłócenie Normalne + Dryft Sensorów {DRIFTING_SENSORS})', fontsize=14)
-plt.xlabel('Czas')
-plt.ylabel('Amplituda')
-plt.grid(True)
-plt.legend(loc='upper right', ncol=3)
+    # 4. Smoothing (Musimy obliczyć w pętli z pamięcią)
+    res_smoothing = []
+    prev_val = None
+    for t_idx in range(TIME_POINTS):
+        readings = data[:, t_idx]
+        val = va.smoothing_voter(readings, prev_val, alpha=0.15)  # alpha mała = mocne wygładzanie
+        prev_val = val
+        res_smoothing.append(val)
+    res_smoothing = np.array(res_smoothing)
 
-# 2. Wykres Porównanie Wyników Głosowania
-plt.subplot(2, 1, 2)  # Wykres 2
-plt.plot(time, nominal, 'k-', linewidth=4, label='Sygnał Nominalny (Idealny)')
-plt.plot(time, voter_plurality_result, 'r--', linewidth=2, label='Formalized Plurality Voter (Tol=0.2)')
-plt.plot(time, voter_weighted_result, 'b:', linewidth=2, label='Weighted Average Voter')
+    # --- ANALIZA WYNIKÓW ---
+    au.display_numerical_results(nominal, data, res_plurality, res_weighted, res_nzm, res_smoothing, time)
+    au.calculate_and_display_mse(nominal, res_plurality, res_weighted, res_nzm, res_smoothing)
 
-plt.title('Porównanie Wyników Algorytmów Głosowania', fontsize=14)
-plt.xlabel('Czas')
-plt.ylabel('Amplituda')
-plt.grid(True)
-plt.legend(loc='upper right')
-plt.tight_layout()  # Automatycznie dopasowuje odstępy
-plt.show()
+    # --- WYKRESY ---
+    plt.figure(figsize=(14, 10))
 
-# Obliczenie sygnałów błędu
-error_plurality = nominal - voter_plurality_result
-error_weighted = nominal - voter_weighted_result
+    # Panel 1: Sensory
+    plt.subplot(2, 1, 1)
+    plt.plot(time, nominal, 'k--', linewidth=2, label='Nominalny', alpha=0.8)
+    colors = ['gray', 'silver', 'lightgray']
+    for i in range(NUM_SENSORS):
+        style = ':' if i in DRIFTING_SENSORS else '-'
+        lw = 2 if i in DRIFTING_SENSORS else 1
+        plt.plot(time, data[i, :], color=colors[i % 3], linestyle=style, linewidth=lw, label=f'Sensor {i}')
 
-plt.figure(figsize=(15, 8))
-plt.subplot(2, 1, 1)
+    plt.title(f'Dane z sensorów (Scenariusz {scenario})')
+    plt.legend()
+    plt.grid(True, alpha=0.3)
 
-plt.plot(time, error_plurality, 'r--', label='Błąd Plurality Voter (e_P)', alpha=0.7)
-plt.plot(time, error_weighted, 'b:', label='Błąd Weighted Average Voter (e_W)', alpha=0.7)
-plt.axhline(0, color='k', linestyle='-', linewidth=1)  # Linia zero dla referencji
-plt.title('Błąd Estymacji w Funkcji Czasu (Error Signal)', fontsize=14)
-plt.xlabel('Czas')
-plt.ylabel('Błąd (Nominalny - Voter)')
-plt.grid(True)
-plt.legend()
+    # Panel 2: Wyniki algorytmów
+    plt.subplot(2, 1, 2)
+    plt.plot(time, nominal, 'k--', linewidth=2, alpha=0.5, label='Nominalny')
 
-plt.subplot(2, 1, 2)
+    plt.plot(time, res_plurality, 'r-', linewidth=1.5, label='Plurality', alpha=0.8)
+    plt.plot(time, res_weighted, 'b-', linewidth=1.5, label='Weighted', alpha=0.8)
+    plt.plot(time, res_nzm, 'm-', linewidth=2, label='N-z-M (Trimmed)', alpha=0.9)
+    plt.plot(time, res_smoothing, 'orange', linewidth=2.5, label='Smoothing', alpha=0.9)
 
-# Histogram dla Plurality Voter
-plt.hist(error_plurality, bins=50, alpha=0.6, label='Plurality Voter', color='red', density=True)
+    plt.title('Porównanie Algorytmów Głosowania')
+    plt.xlabel('Czas')
+    plt.legend(loc='upper right')
+    plt.grid(True)
 
-# Histogram dla Weighted Average Voter
-plt.hist(error_weighted, bins=50, alpha=0.6, label='Weighted Average Voter', color='blue', density=True)
-
-plt.title('Histogram Rozkładu Błędu Estymacji', fontsize=14)
-plt.xlabel('Wielkość Błędu (e)')
-plt.ylabel('Gęstość')
-plt.legend()
-plt.grid(axis='y', alpha=0.5)
-plt.tight_layout()
-plt.show()
+    plt.tight_layout()
+    plt.show()
