@@ -18,95 +18,102 @@ if __name__ == '__main__':
     print(
         '''
         scenariusz 1: Idealne działanie z szumem bazowym
-        scenariusz 2: 2 z 5 działają wadliwie
-        scenariusz 3: Awaria większości sensorów 4 na 6
-        scenariusz 4: Awaria tzw. Szpilki
-        scenariusz 5: Awaria krytyczna 6 na 6
+        scenariusz 2: Awaria pojedynczego sensora (Drift)
+        scenariusz 3: Awaria większości sensorów (2 na 3)
+        scenariusz 4: Awaria tzw. Szpilki (Impulsy)
+        scenariusz 5: Duży szum na wszystkich
+        scenariusz 6: Nierówne wagi (1 Główny + 2 Słabsze) - Awaria Głównego
         '''
     )
-    scenario = int(input("Wybierz scenariusz (1 - 5): "))
+    scenario = int(input("Wybierz scenariusz (1 - 6): "))
 
     match scenario:
         case 1:
-            # ----------------------------------------------------
-            # SCENARIUSZ A: Działanie Idealne (Baseline)
-            # ----------------------------------------------------
-
-            print("--- SCENARIUSZ A: Działanie Idealne (Tylko Szum Bazowy) ---")
-            NUM_SENSORS = 5
-            STATIC_WEIGHTS = [0.2, 0.2, 0.2, 0.2, 0.2] # Równe wagi
-            DRIFTING_SENSORS = [] # Brak awarii do podświetlenia
-
-            test_scenarios = [] # Brak wstrzykniętych awarii
+            # --- SCENARIUSZ 1: IDEALNE DZIAŁANIE (BASELINE) ---
+            print("--- SCENARIUSZ 1: Działanie Idealne (Tylko Szum Bazowy) ---")
+            NUM_SENSORS = 3
+            # Wagi początkowe (dla 3 sensorów po równo to ok. 0.33)
+            STATIC_WEIGHTS = [1 / 3, 1 / 3, 1 / 3]
+            DRIFTING_SENSORS = []
+            test_scenarios = []  # Brak wstrzykniętych awarii
 
         case 2:
-            # ----------------------------------------------------
-            # SCENARIUSZ B: Awarie Mniej niż 50% (Dryft + Stuck-At)
-            # ----------------------------------------------------
-
-            print("--- SCENARIUSZ B: Realistyczny (2 z 5 sensorów z awarią) ---")
-            NUM_SENSORS = 5
-            STATIC_WEIGHTS = [0.1, 0.3, 0.3, 0.2, 0.1]  # Wagi celowo zróżnicowane
-            DRIFTING_SENSORS = [0, 4]
+            # --- SCENARIUSZ 2: POJEDYNCZA AWARIA (DRIFT) ---
+            # Testuje, czy votery potrafią zignorować jeden "odjeżdżający" sensor.
+            print("--- SCENARIUSZ 2: Awaria pojedynczego sensora (Drift) ---")
+            NUM_SENSORS = 3
+            STATIC_WEIGHTS = [1 / 3, 1 / 3, 1 / 3]
+            DRIFTING_SENSORS = [2]  # Oznaczamy sensor nr 2 jako wadliwy (dla wykresów)
 
             test_scenarios = [
-                # Sensor 0: stały duży dryft (Bias)
-                {'type': 'bias', 'sensors': [0], 'magnitude': 2.0},
-                # Sensor 4: Awaria Stuck-At-Value (Zwraca stałą 0.5)
-                {'type': 'stuck', 'sensors': [4], 'value': 0.5}
+                {'sensor_index': 2, 'fault_type': 'drift', 'params': {'drift_rate': 0.02}}
             ]
 
         case 3:
-            # ----------------------------------------------------
-            # SCENARIUSZ C: Awaria Większości (4 z 6 sensorów z awarią)
-            # ----------------------------------------------------
-
-            print("--- SCENARIUSZ C: Awaria Większości (Tylko 2/6 Poprawne) ---")
-            NUM_SENSORS = 6
-            STATIC_WEIGHTS = [0.15, 0.15, 0.15, 0.20, 0.20, 0.15]
-            DRIFTING_SENSORS = [0, 1, 2, 5]
+            # --- SCENARIUSZ 3: AWARIA WIĘKSZOŚCI (2 z 3) ---
+            # To jest test krytyczny - system powinien zawieść, chyba że voter ma pamięć (Wygładzający).
+            print("--- SCENARIUSZ 3: Awaria większości (2 na 3 sensory wadliwe) ---")
+            NUM_SENSORS = 3
+            STATIC_WEIGHTS = [1 / 3, 1 / 3, 1 / 3]
+            DRIFTING_SENSORS = [1, 2]
 
             test_scenarios = [
-                # Sensor 0 i 1: duży dryft w przeciwnych kierunkach
-                {'type': 'bias', 'sensors': [0], 'magnitude': 2.5},
-                {'type': 'bias', 'sensors': [1], 'magnitude': -2.5},
-                # Sensor 2: Awaria Stuck-At-Value (Zwraca stałą 0.0)
-                {'type': 'stuck', 'sensors': [2], 'value': 0.0},
-                # Sensor 5: Awaria Freeze od połowy
-                {'type': 'freeze', 'sensors': [5], 'time_point': 100}
+                {'sensor_index': 1, 'fault_type': 'gaussian', 'params': {'mean': 0.5, 'std': 0.5}},
+                {'sensor_index': 2, 'fault_type': 'drift', 'params': {'drift_rate': -0.03}}
             ]
 
         case 4:
-            # ----------------------------------------------------
-            # SCENARIUSZ D: Szpilki (Test wrażliwości na pojedyncze błędy)
-            # ----------------------------------------------------
-
-            print("--- SCENARIUSZ D: Zakłócenia Impulsowe (Spikes) ---")
-            NUM_SENSORS = 5
-            STATIC_WEIGHTS = [0.2, 0.2, 0.2, 0.2, 0.2]
-            DRIFTING_SENSORS = [1, 3]
+            # --- SCENARIUSZ 4: SZPILKI (OUTLIERS) ---
+            # Idealny test dla algorytmu "N z M" (odrzucanie skrajnych) oraz Plurality.
+            print("--- SCENARIUSZ 4: Zakłócenia impulsowe (Szpilki) ---")
+            NUM_SENSORS = 3
+            STATIC_WEIGHTS = [1 / 3, 1 / 3, 1 / 3]
+            DRIFTING_SENSORS = [0]
 
             test_scenarios = [
-                # Sensor 1 i 3: sporadyczne, silne szpilki
-                {'type': 'spikes', 'sensors': [1, 3], 'magnitude': 5.0, 'density': 0.01}
+                {'sensor_index': 0, 'fault_type': 'outlier', 'params': {'min_val': -2.0, 'max_val': 2.0, 'prob': 0.15}}
             ]
+
         case 5:
-            # ----------------------------------------------------
-            # SCENARIUSZ E: Awaria Krytyczna (Brak Konsensusu)
-            # ----------------------------------------------------
-
-            print("--- SCENARIUSZ E: Krytyczna (Dwie równe, duże grupy błędów) ---")
-            NUM_SENSORS = 6
-            STATIC_WEIGHTS = [0.1, 0.2, 0.2, 0.2, 0.2, 0.1]
-            DRIFTING_SENSORS = [0, 1, 4, 5]
+            # --- SCENARIUSZ 5: DUŻY SZUM WSZĘDZIE ---
+            # Testuje jak algorytm Wygładzający radzi sobie z ogólnym chaosem.
+            print("--- SCENARIUSZ 5: Wysoki poziom szumu na wszystkich sensorach ---")
+            NUM_SENSORS = 3
+            STATIC_WEIGHTS = [1 / 3, 1 / 3, 1 / 3]
+            DRIFTING_SENSORS = [0, 1, 2]
 
             test_scenarios = [
-                # Grupa 1 (Sensory 0, 1): Duży dryft w górę
-                {'type': 'bias', 'sensors': [0, 1], 'magnitude': 3.0},
-                # Grupa 2 (Sensory 4, 5): Duży dryft w dół
-                {'type': 'bias', 'sensors': [4, 5], 'magnitude': -3.0}
-                # Sensory 2, 3: Pracują poprawnie, ale są w mniejszości!
+                {'sensor_index': 0, 'fault_type': 'gaussian', 'params': {'mean': 0.0, 'std': 0.3}},
+                {'sensor_index': 1, 'fault_type': 'gaussian', 'params': {'mean': 0.0, 'std': 0.4}},
+                {'sensor_index': 2, 'fault_type': 'gaussian', 'params': {'mean': 0.0, 'std': 0.2}}
             ]
+
+        case 6:
+            print("--- SCENARIUSZ 6: Nierówne wagi [0.6, 0.2, 0.2] - Awaria Sensora Głównego ---")
+            NUM_SENSORS = 3
+
+            # Główny ma 60% głosu, pomocnicze po 20%
+            STATIC_WEIGHTS = [0.6, 0.2, 0.2]
+
+            DRIFTING_SENSORS = [0]  # Awaria dotyczy sensora z największą wagą!
+
+            test_scenarios = [
+                # Sensor 0 (Master) zaczyna powoli "odpływać"
+                {'sensor_index': 0, 'fault_type': 'drift', 'params': {'drift_rate': 0.04}},
+
+                # Sensor 1 (Slave) - działa poprawnie, ale ma większy szum (bo jest tańszy)
+                {'sensor_index': 1, 'fault_type': 'gaussian', 'params': {'mean': 0.0, 'std': 0.15}},
+
+                # Sensor 2 (Slave) - działa poprawnie, ale ma większy szum
+                {'sensor_index': 2, 'fault_type': 'gaussian', 'params': {'mean': 0.0, 'std': 0.15}}
+            ]
+
+        case _:
+            print("Niepoprawny wybór, uruchamiam scenariusz domyślny (1)")
+            NUM_SENSORS = 3
+            STATIC_WEIGHTS = [1 / 3, 1 / 3, 1 / 3]
+            DRIFTING_SENSORS = []
+            test_scenarios = []
 
     # --- URUCHOMIENIE SYMULACJI (WSPÓLNE DLA WSZYSTKICH SCENARIUSZY) ---
     # Generowanie danych
