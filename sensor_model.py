@@ -4,57 +4,61 @@ import numpy as np
 def generate_sensor_data(time_points, num_sensors, amplitude=1.0, frequency=1.0,
                          base_noise_level=0.05, fault_scenarios=None):
     """
-    Generuje sygnał i aplikuje awarie zgodnie z definicjami w main.py
-    (Drift, Gaussian, Outlier).
+    Generuje nominalny sygnał sinusoidalny i zaszumione dane z sensorów
+    z możliwością symulowania różnych scenariuszy awarii.
+
+    :param base_noise_level: Poziom szumu podstawowego (losowego, normalnego).
+    :param fault_scenarios: Lista słowników definiujących awarie.
+        Typy: 'bias', 'spikes', 'stuck', 'freeze'.
     """
-    t = np.linspace(0, 4 * np.pi, time_points)  # Wydłużyłem czas, żeby było widać więcej cykli
+
+    t = np.linspace(0, 2 * np.pi, time_points)
     nominal_signal = amplitude * np.sin(frequency * t)
     sensor_data = np.zeros((num_sensors, time_points))
 
-    # Dla każdego sensora generujemy bazowy sygnał z szumem
     for i in range(num_sensors):
-        # Kopia idealnego sygnału
-        current_signal = np.copy(nominal_signal)
 
-        # Dodajemy bazowy szum pomiarowy (mały, występujący zawsze)
-        current_signal += np.random.normal(0, base_noise_level, time_points)
+        current_sensor_signal = np.copy(nominal_signal)
 
-        # --- APLIKOWANIE AWARII (FAULT INJECTION) ---
+        # 1. Podstawowe zakłócenie (szum normalny dla wszystkich)
+        base_noise = np.random.normal(0, base_noise_level, time_points)
+        current_sensor_signal += base_noise
+
+        # 2. Awarie specyficzne dla sensora (Fault Injection)
         if fault_scenarios:
             for fault in fault_scenarios:
-                # Sprawdzamy, czy ta awaria dotyczy tego sensora
-                if fault['sensor_index'] == i:
-                    f_type = fault['fault_type']
-                    params = fault['params']
+                if i in fault.get('sensors', []):
 
-                    if f_type == 'drift':
-                        # Symulacja narastającego błędu (offset rośnie w czasie)
-                        drift_rate = params.get('drift_rate', 0.01)
-                        drift_vector = np.linspace(0, drift_rate * time_points, time_points)
-                        current_signal += drift_vector
+                    fault_type = fault['type']
+                    magnitude = fault.get('magnitude', 1.0)
 
-                    elif f_type == 'gaussian':
-                        # Dodatkowy, silny szum (np. uszkodzona elektronika)
-                        mean = params.get('mean', 0.0)
-                        std = params.get('std', 0.5)
-                        noise = np.random.normal(mean, std, time_points)
-                        current_signal += noise
+                    if fault_type == 'bias':
+                        # AWARIA: Dryft / Stałe przesunięcie
+                        current_sensor_signal += magnitude
 
-                    elif f_type == 'outlier':
-                        # Losowe szpilki (impulsy)
-                        prob = params.get('prob', 0.05)
-                        min_val = params.get('min_val', -2.0)
-                        max_val = params.get('max_val', 2.0)
+                    elif fault_type == 'stuck':
+                        # AWARIA: Stuck-At-Value (Sensor zwraca stałą wartość)
+                        stuck_value = fault.get('value', 0.0)
+                        current_sensor_signal[:] = stuck_value
 
-                        # Maska gdzie wystąpią szpilki
-                        outlier_mask = np.random.rand(time_points) < prob
-                        # Wartości szpilek
-                        outliers = np.random.uniform(min_val, max_val, time_points)
+                    elif fault_type == 'spikes':
+                        # AWARIA: Szpilki (impulsowe zakłócenia)
+                        density = fault.get('density', 0.01)
+                        num_spikes = int(time_points * density)
+                        spike_indices = np.random.choice(time_points, size=num_spikes, replace=False)
+                        spike_values = np.random.uniform(-magnitude, magnitude, num_spikes)
+                        spike_mask = np.zeros(time_points)
+                        spike_mask[spike_indices] = spike_values
+                        current_sensor_signal += spike_mask
 
-                        # Nadpisujemy sygnał w miejscach wystąpienia szpilek (lub dodajemy)
-                        # Tutaj dodajemy do sygnału:
-                        current_signal[outlier_mask] += outliers[outlier_mask]
+                    elif fault_type == 'freeze':
+                        # AWARIA: Freeze Fault (trzymanie wartości z momentu awarii)
+                        freeze_start_time = fault.get('time_point', time_points // 4)
 
-        sensor_data[i, :] = current_signal
+                        if freeze_start_time < time_points:
+                            freeze_value = current_sensor_signal[freeze_start_time]
+                            current_sensor_signal[freeze_start_time:] = freeze_value
+
+        sensor_data[i, :] = current_sensor_signal
 
     return nominal_signal, sensor_data, t
