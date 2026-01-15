@@ -108,7 +108,6 @@ if __name__ == '__main__':
 
 
     # --- URUCHOMIENIE SYMULACJI (WSPÓLNE DLA WSZYSTKICH SCENARIUSZY) ---
-
     # Generowanie danych
     nominal, data, time = sensor_model.generate_sensor_data(
         TIME_POINTS, NUM_SENSORS,
