@@ -8,7 +8,7 @@ import sensor_model
 import voter_algorithms as va
 import analysis_utils as au
 
-# --- KONFIGURACJA ESTETYKI WYKRESÓW ---
+# --- KONFIGURACJA ESTETYKI ---
 plt.rcParams['font.size'] = 10
 plt.rcParams['axes.grid'] = True
 plt.rcParams['grid.alpha'] = 0.5
@@ -28,10 +28,10 @@ if __name__ == '__main__':
         -------------------------------------------------------
         1: Baseline (Idealne działanie, tylko szum)
         2: Drift (Jeden sensor powoli odpływa)
-        3: Awaria 2 z 3 (Dryft + Szum Gaussowski - trudny przypadek)
-        4: Szpilki/Impulsy (Test odporności na piki - Outliers)
+        3: Awaria 2 z 3 (Dryft + Szum Gaussowski)
+        4: Szpilki/Impulsy (Test odporności na piki)
         5: Chaos (Wysoki szum na wszystkich sensorach)
-        6: Heterogeniczny (Awaria głównego sensora o wadze 60%)
+        6: Heterogeniczny (Awaria głównego sensora)
         '''
     )
     try:
@@ -47,14 +47,12 @@ if __name__ == '__main__':
             STATIC_WEIGHTS = [1 / 3, 1 / 3, 1 / 3]
             DRIFTING_SENSORS = []
             test_scenarios = []
-
         case 2:
             title_text = "Awaria Pojedyncza (Drift)"
             NUM_SENSORS = 3
             STATIC_WEIGHTS = [1 / 3, 1 / 3, 1 / 3]
             DRIFTING_SENSORS = [2]
             test_scenarios = [{'sensor_index': 2, 'fault_type': 'drift', 'params': {'drift_rate': 0.03}}]
-
         case 3:
             title_text = "Awaria Większości (2 z 3)"
             NUM_SENSORS = 3
@@ -64,7 +62,6 @@ if __name__ == '__main__':
                 {'sensor_index': 1, 'fault_type': 'gaussian', 'params': {'mean': 0.5, 'std': 0.5}},
                 {'sensor_index': 2, 'fault_type': 'drift', 'params': {'drift_rate': -0.04}}
             ]
-
         case 4:
             title_text = "Zakłócenia Impulsowe (Szpilki)"
             NUM_SENSORS = 3
@@ -73,7 +70,6 @@ if __name__ == '__main__':
             test_scenarios = [
                 {'sensor_index': 0, 'fault_type': 'outlier', 'params': {'min_val': -3.0, 'max_val': 3.0, 'prob': 0.1}}
             ]
-
         case 5:
             title_text = "Wysoki Poziom Szumu (Chaos)"
             NUM_SENSORS = 3
@@ -84,18 +80,16 @@ if __name__ == '__main__':
                 {'sensor_index': 1, 'fault_type': 'gaussian', 'params': {'mean': 0.0, 'std': 0.4}},
                 {'sensor_index': 2, 'fault_type': 'gaussian', 'params': {'mean': 0.0, 'std': 0.3}}
             ]
-
         case 6:
             title_text = "System Heterogeniczny (Awaria Mastera)"
             NUM_SENSORS = 3
-            STATIC_WEIGHTS = [0.6, 0.2, 0.2]  # Master (0) ma 60% wagi
+            STATIC_WEIGHTS = [0.6, 0.2, 0.2]
             DRIFTING_SENSORS = [0]
             test_scenarios = [
                 {'sensor_index': 0, 'fault_type': 'drift', 'params': {'drift_rate': 0.05}},
                 {'sensor_index': 1, 'fault_type': 'gaussian', 'params': {'mean': 0.0, 'std': 0.1}},
                 {'sensor_index': 2, 'fault_type': 'gaussian', 'params': {'mean': 0.0, 'std': 0.1}}
             ]
-
         case _:
             title_text = "Domyślny"
             NUM_SENSORS = 3
@@ -114,38 +108,24 @@ if __name__ == '__main__':
     )
 
     # --- OBLICZENIA VOTERÓW ---
-    print("Obliczam wyniki algorytmów...")
-
-    # 1. Plurality
     res_plurality = va.formalized_plurality_voter(data, tolerance=TOLERANCE_PLURALITY)
-
-    # 2. Weighted Static
     res_weighted_static = va.weighted_average_voter(data, weights=STATIC_WEIGHTS)
 
-    # Pętla dla pozostałych (wymagających przetwarzania krok-po-kroku)
     res_nzm = []
     res_smoothing = []
     res_dynamic_weighted = []
-
     prev_val_smooth = None
 
     for t_idx in range(TIME_POINTS):
         readings = data[:, t_idx]
+        res_nzm.append(va.n_z_m_voter(readings, m_to_keep=2))
 
-        # 3. N z M (Trimmed Mean)
-        val_nzm = va.n_z_m_voter(readings, m_to_keep=2)
-        res_nzm.append(val_nzm)
-
-        # 4. Smoothing (Wygładzający)
         val_smooth = va.smoothing_voter(readings, prev_val_smooth, alpha=0.15)
         prev_val_smooth = val_smooth
         res_smoothing.append(val_smooth)
 
-        # 5. Dynamic Weighted (Brøn)
-        val_dynamic = va.weighted_average_dynamic_bron(readings, a=0.5)
-        res_dynamic_weighted.append(val_dynamic)
+        res_dynamic_weighted.append(va.weighted_average_dynamic_bron(readings, a=0.5))
 
-    # Konwersja na numpy array
     res_nzm = np.array(res_nzm)
     res_smoothing = np.array(res_smoothing)
     res_dynamic_weighted = np.array(res_dynamic_weighted)
@@ -157,12 +137,11 @@ if __name__ == '__main__':
                                  res_dynamic_weighted)
 
     # =========================================================================
-    # WYKRES 1: KOMPLEKSOWA ANALIZA CZASOWA
+    # WYKRES 1: KOMPLEKSOWA ANALIZA CZASOWA (3 PANELE)
     # =========================================================================
-    # Zmieniona wysokość (8.5 cala) dla lepszego dopasowania do monitora
+    # Używamy mniejszej wysokości (8.5), żeby mieściło się na ekranie
     fig1, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(11, 8.5), sharex=True)
 
-    # Dostosowanie marginesów
     fig1.subplots_adjust(top=0.92, hspace=0.3)
     fig1.suptitle(f"Scenariusz: {title_text}", fontsize=14, fontweight='bold')
 
@@ -178,37 +157,34 @@ if __name__ == '__main__':
     ax1.set_ylabel("Amplituda")
     ax1.set_title("A. Dane z sensorów", loc='left', fontsize=10, fontweight='bold')
     ax1.legend(loc='upper right', fontsize=8, framealpha=0.9)
-    ax1.grid(True, alpha=0.3)
 
-    # --- PANEL B: GRUPA PLURALITY & WEIGHTED ---
+    # --- PANEL B: ALGORYTMY GŁOSUJĄCE (Plurality + Weighted) ---
     ax2.plot(time, nominal, 'k--', alpha=0.2)
     ax2.plot(time, res_plurality, color='blue', linewidth=1.2, label='Plurality')
     ax2.plot(time, res_weighted_static, color='green', linewidth=1.2, label='Weighted (Static)')
-    # Dynamiczny tutaj, bo to też rodzina "Weighted"
     ax2.plot(time, res_dynamic_weighted, color='crimson', linestyle='--', linewidth=1.5, label='Dynamic (Brøn)')
 
     ax2.set_ylabel("Wynik")
-    ax2.set_title("B. Algorytmy: Plurality i Średnie Ważone (Stat/Dyn)", loc='left', fontsize=10, fontweight='bold')
+    ax2.set_title("B. Grupa: Średnie i Głosowanie", loc='left', fontsize=10, fontweight='bold')
     ax2.legend(loc='upper right', fontsize=8, framealpha=0.9)
-    ax2.grid(True, alpha=0.3)
 
-    # --- PANEL C: GRUPA N-Z-M & SMOOTHING ---
+    # --- PANEL C: ALGORYTMY FILTRUJĄCE (N-z-M + Smoothing) ---
     ax3.plot(time, nominal, 'k--', alpha=0.2)
     ax3.plot(time, res_nzm, color='purple', linestyle='-', linewidth=1.2, label='N-z-M')
     ax3.plot(time, res_smoothing, color='orange', linewidth=2, label='Smoothing')
 
     ax3.set_ylabel("Wynik")
     ax3.set_xlabel("Czas")
-    ax3.set_title("C. Algorytmy: N-z-M i Wygładzanie", loc='left', fontsize=10, fontweight='bold')
+    ax3.set_title("C. Grupa: Filtry i Odrzucanie Skrajnych", loc='left', fontsize=10, fontweight='bold')
     ax3.legend(loc='upper right', fontsize=8, framealpha=0.9)
-    ax3.grid(True, alpha=0.3)
 
-    plt.show()  # Pokaż pierwsze okno
+    plt.savefig(f'scenariusz_{scenario}_przebiegi.png', dpi=150)
+    plt.show()
 
     # =========================================================================
     # WYKRES 2: ANALIZA BŁĘDU (Error Plot)
     # =========================================================================
-    plt.figure(figsize=(11, 6))
+    plt.figure(figsize=(11, 5))
 
     err_plurality = nominal - res_plurality
     err_weighted = nominal - res_weighted_static
@@ -226,9 +202,10 @@ if __name__ == '__main__':
     plt.title(f"Sygnał Błędu (Nominalny - Wyjście Votera)\n{title_text}")
     plt.xlabel("Czas")
     plt.ylabel("Błąd")
-    plt.legend(loc='upper right', ncol=2)
+    plt.legend(loc='upper right', ncol=3, fontsize=8)
     plt.grid(True, which='both', linestyle='--', alpha=0.7)
     plt.tight_layout()
+    plt.savefig(f'scenariusz_{scenario}_bledy.png', dpi=150)
     plt.show()
 
     # =========================================================================
@@ -236,37 +213,30 @@ if __name__ == '__main__':
     # =========================================================================
     mse_values = {
         'Plurality': np.mean(err_plurality ** 2),
-        'Weighted\n(Static)': np.mean(err_weighted ** 2),
-        'Dynamic\n(Brøn)': np.mean(err_dynamic ** 2),
+        'Weighted': np.mean(err_weighted ** 2),
+        'Dynamic': np.mean(err_dynamic ** 2),
         'N-z-M': np.mean(err_nzm ** 2),
         'Smoothing': np.mean(err_smooth ** 2)
     }
 
     names = list(mse_values.keys())
     values = list(mse_values.values())
-
-    # Kolorowanie: Najlepszy (zielony), Najgorszy (czerwony)
     best_idx = np.argmin(values)
-    worst_idx = np.argmax(values)
     colors = ['skyblue'] * len(names)
     colors[best_idx] = 'forestgreen'
-    colors[worst_idx] = 'firebrick'
 
-    plt.figure(figsize=(10, 6))
+    plt.figure(figsize=(10, 5))
     bars = plt.bar(names, values, color=colors, edgecolor='black', alpha=0.8)
-
-    plt.title(f"Ranking MSE (Błąd Średniokwadratowy)\n{title_text}", fontsize=14)
-    plt.ylabel("Wartość MSE (Mniej = Lepiej)")
+    plt.title(f"Ranking MSE (Błąd Średniokwadratowy) - {title_text}", fontweight='bold')
+    plt.ylabel("MSE (Mniej = Lepiej)")
 
     for bar in bars:
         height = bar.get_height()
-        plt.text(bar.get_x() + bar.get_width() / 2., height,
-                 f'{height:.4f}',
-                 ha='center', va='bottom', fontsize=11, fontweight='bold')
+        plt.text(bar.get_x() + bar.get_width() / 2., height, f'{height:.4f}', ha='center', va='bottom')
 
-    plt.grid(axis='y', linestyle='--', alpha=0.5)
+    plt.grid(axis='y', linestyle='--')
     plt.tight_layout()
+    plt.savefig(f'scenariusz_{scenario}_ranking.png', dpi=150)
     plt.show()
 
-    print("\nGotowe! Wykresy zostały wygenerowane.")
-
+    print("\nGotowe! Wygenerowano wykresy i zapisano jako pliki PNG.")

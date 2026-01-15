@@ -6,10 +6,9 @@ import pandas as pd
 def display_numerical_results(nominal, sensor_data, res_plurality, res_weighted, res_nzm, res_smoothing, res_dynamic,
                               time, num_samples=5):
     """
-    Wyświetla tabelę wyników dla wszystkich 5 algorytmów.
+    Wyświetla tabelę wyników dla wszystkich 5 algorytmów w losowych punktach.
     """
     time_points = len(nominal)
-    # Zabezpieczenie, gdyby próbek było mniej niż num_samples
     actual_samples = min(num_samples, time_points)
     sample_indices = np.random.choice(time_points, size=actual_samples, replace=False)
     sample_indices.sort()
