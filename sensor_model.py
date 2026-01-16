@@ -3,58 +3,42 @@ import numpy as np
 
 def generate_sensor_data(time_points, num_sensors, amplitude=1.0, frequency=1.0,
                          base_noise_level=0.05, fault_scenarios=None):
-    """
-    Generuje sygnał i aplikuje awarie zgodnie z definicjami w main.py
-    (Drift, Gaussian, Outlier).
-    """
-    # Troszkę dłuższy czas (4 PI), żeby ładnie było widać przebiegi
     t = np.linspace(0, 4 * np.pi, time_points)
     nominal_signal = amplitude * np.sin(frequency * t)
     sensor_data = np.zeros((num_sensors, time_points))
 
-    # Dla każdego sensora generujemy bazowy sygnał z szumem
     for i in range(num_sensors):
-        # Kopia idealnego sygnału
         current_signal = np.copy(nominal_signal)
-
-        # Dodajemy bazowy szum pomiarowy (mały, występujący zawsze)
         current_signal += np.random.normal(0, base_noise_level, time_points)
 
-        # --- APLIKOWANIE AWARII (FAULT INJECTION) ---
         if fault_scenarios:
             for fault in fault_scenarios:
-                # Sprawdzamy, czy ta awaria dotyczy tego sensora
                 if fault['sensor_index'] == i:
                     f_type = fault['fault_type']
                     params = fault['params']
 
                     if f_type == 'drift':
-                        # Symulacja narastającego błędu (offset rośnie w czasie)
                         drift_rate = params.get('drift_rate', 0.01)
-                        # Tworzymy wektor narastający liniowo
-                        drift_vector = np.linspace(0, drift_rate * time_points, time_points)
-                        current_signal += drift_vector
+                        current_signal += np.linspace(0, drift_rate * time_points, time_points)
 
                     elif f_type == 'gaussian':
-                        # Dodatkowy, silny szum (np. uszkodzona elektronika)
-                        mean = params.get('mean', 0.0)
-                        std = params.get('std', 0.5)
-                        noise = np.random.normal(mean, std, time_points)
-                        current_signal += noise
+                        current_signal += np.random.normal(params.get('mean', 0), params.get('std', 0.5), time_points)
 
                     elif f_type == 'outlier':
-                        # Losowe szpilki (impulsy)
                         prob = params.get('prob', 0.05)
-                        min_val = params.get('min_val', -2.0)
-                        max_val = params.get('max_val', 2.0)
+                        mask = np.random.rand(time_points) < prob
+                        current_signal[mask] += np.random.uniform(params.get('min_val', -2), params.get('max_val', 2),
+                                                                  np.sum(mask))
+                    elif f_type == 'stuck':
+                        # Sensor zacina się na stałej wartości od pewnego momentu lub całościowo
+                        val = params.get('value', 0.0)  # Na jakiej wartości się zaciął
+                        start_idx = params.get('start_idx', 0)  # Od kiedy (0 = od początku)
+                        current_signal[start_idx:] = val
 
-                        # Maska gdzie wystąpią szpilki
-                        outlier_mask = np.random.rand(time_points) < prob
-                        # Wartości szpilek
-                        outliers = np.random.uniform(min_val, max_val, time_points)
-
-                        # Dodajemy szpilki do sygnału w wylosowanych miejscach
-                        current_signal[outlier_mask] += outliers[outlier_mask]
+                    elif f_type == 'bias':
+                        # Stałe przesunięcie (błąd kalibracji)
+                        offset = params.get('offset', 0.5)
+                        current_signal += offset
 
         sensor_data[i, :] = current_signal
 

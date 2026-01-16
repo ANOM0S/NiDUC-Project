@@ -1,9 +1,10 @@
 import matplotlib
-# Jeśli wykresy nie wyskakują w oknie, odkomentuj linię poniżej (zależnie od systemu):
+# Jeśli wykresy nie wyskakują w oknie, odkomentuj linię poniżej:
 matplotlib.use('TkAgg')
 
 import matplotlib.pyplot as plt
 import numpy as np
+import os  # <--- Import folderów
 import sensor_model
 import voter_algorithms as va
 import analysis_utils as au
@@ -14,6 +15,12 @@ plt.rcParams['axes.grid'] = True
 plt.rcParams['grid.alpha'] = 0.5
 plt.rcParams['lines.linewidth'] = 1.5
 
+# --- KONFIGURACJA FOLDERU NA WYNIKI ---
+OUTPUT_DIR = 'wykresy_symulacja'
+if not os.path.exists(OUTPUT_DIR):
+    os.makedirs(OUTPUT_DIR)
+    print(f"Utworzono folder na wyniki: {OUTPUT_DIR}")
+
 if __name__ == '__main__':
     # --- WSPÓLNE PARAMETRY ---
     TIME_POINTS = 300
@@ -21,7 +28,6 @@ if __name__ == '__main__':
     BASE_NOISE = 0.05
     TOLERANCE_PLURALITY = 0.3
 
-    # Menu wyboru
     print(
         '''
         DOSTĘPNE SCENARIUSZE TESTOWE:
@@ -32,10 +38,11 @@ if __name__ == '__main__':
         4: Szpilki/Impulsy (Test odporności na piki)
         5: Chaos (Wysoki szum na wszystkich sensorach)
         6: Heterogeniczny (Awaria głównego sensora)
+        7: Hard Faults (Zacięcie + Bias)
         '''
     )
     try:
-        scenario = int(input("Wybierz scenariusz (1 - 6): "))
+        scenario = int(input("Wybierz scenariusz (1 - 7): "))
     except ValueError:
         scenario = 1
 
@@ -90,6 +97,18 @@ if __name__ == '__main__':
                 {'sensor_index': 1, 'fault_type': 'gaussian', 'params': {'mean': 0.0, 'std': 0.1}},
                 {'sensor_index': 2, 'fault_type': 'gaussian', 'params': {'mean': 0.0, 'std': 0.1}}
             ]
+        case 7:
+            title_text = "Hard Faults (Zacięcie + Bias)"
+            NUM_SENSORS = 3
+            STATIC_WEIGHTS = [1 / 3, 1 / 3, 1 / 3]
+            # Sensor 1 umarł (linia płaska), Sensor 2 kłamie (przesunięcie)
+            DRIFTING_SENSORS = [1, 2]
+            test_scenarios = [
+                # Sensor 1: Zacięcie na wartości -0.8 (symulacja zwarcia/awarii zasilania)
+                {'sensor_index': 1, 'fault_type': 'stuck', 'params': {'value': -0.8, 'start_idx': 50}},
+                # Sensor 2: Stały błąd kalibracji +0.5V
+                {'sensor_index': 2, 'fault_type': 'bias', 'params': {'offset': 0.5}}
+            ]
         case _:
             title_text = "Domyślny"
             NUM_SENSORS = 3
@@ -139,13 +158,12 @@ if __name__ == '__main__':
     # =========================================================================
     # WYKRES 1: KOMPLEKSOWA ANALIZA CZASOWA (3 PANELE)
     # =========================================================================
-    # Używamy mniejszej wysokości (8.5), żeby mieściło się na ekranie
     fig1, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(11, 8.5), sharex=True)
 
     fig1.subplots_adjust(top=0.92, hspace=0.3)
     fig1.suptitle(f"Scenariusz: {title_text}", fontsize=14, fontweight='bold')
 
-    # --- PANEL A: SENSORY ---
+    # PANEL A: SENSORY
     ax1.plot(time, nominal, 'k--', linewidth=1.5, label='Wzorzec')
     for i in range(NUM_SENSORS):
         label_text = f'S{i}'
@@ -158,27 +176,28 @@ if __name__ == '__main__':
     ax1.set_title("A. Dane z sensorów", loc='left', fontsize=10, fontweight='bold')
     ax1.legend(loc='upper right', fontsize=8, framealpha=0.9)
 
-    # --- PANEL B: ALGORYTMY GŁOSUJĄCE (Plurality + Weighted) ---
+    # PANEL B: ALGORYTMY PODSTAWOWE
     ax2.plot(time, nominal, 'k--', alpha=0.2)
     ax2.plot(time, res_plurality, color='blue', linewidth=1.2, label='Plurality')
     ax2.plot(time, res_weighted_static, color='green', linewidth=1.2, label='Weighted (Static)')
     ax2.plot(time, res_dynamic_weighted, color='crimson', linestyle='--', linewidth=1.5, label='Dynamic (Brøn)')
-
     ax2.set_ylabel("Wynik")
     ax2.set_title("B. Grupa: Średnie i Głosowanie", loc='left', fontsize=10, fontweight='bold')
     ax2.legend(loc='upper right', fontsize=8, framealpha=0.9)
 
-    # --- PANEL C: ALGORYTMY FILTRUJĄCE (N-z-M + Smoothing) ---
+    # PANEL C: ALGORYTMY ZAAWANSOWANE
     ax3.plot(time, nominal, 'k--', alpha=0.2)
     ax3.plot(time, res_nzm, color='purple', linestyle='-', linewidth=1.2, label='N-z-M')
     ax3.plot(time, res_smoothing, color='orange', linewidth=2, label='Smoothing')
-
     ax3.set_ylabel("Wynik")
     ax3.set_xlabel("Czas")
     ax3.set_title("C. Grupa: Filtry i Odrzucanie Skrajnych", loc='left', fontsize=10, fontweight='bold')
     ax3.legend(loc='upper right', fontsize=8, framealpha=0.9)
 
-    plt.savefig(f'scenariusz_{scenario}_przebiegi.png', dpi=150)
+    # Zapis do folderu
+    file_path = os.path.join(OUTPUT_DIR, f'scenariusz_{scenario}_przebiegi.png')
+    plt.savefig(file_path, dpi=150)
+    print(f"Zapisano: {file_path}")
     plt.show()
 
     # =========================================================================
@@ -205,7 +224,10 @@ if __name__ == '__main__':
     plt.legend(loc='upper right', ncol=3, fontsize=8)
     plt.grid(True, which='both', linestyle='--', alpha=0.7)
     plt.tight_layout()
-    plt.savefig(f'scenariusz_{scenario}_bledy.png', dpi=150)
+
+    file_path = os.path.join(OUTPUT_DIR, f'scenariusz_{scenario}_bledy.png')
+    plt.savefig(file_path, dpi=150)
+    print(f"Zapisano: {file_path}")
     plt.show()
 
     # =========================================================================
@@ -236,7 +258,56 @@ if __name__ == '__main__':
 
     plt.grid(axis='y', linestyle='--')
     plt.tight_layout()
-    plt.savefig(f'scenariusz_{scenario}_ranking.png', dpi=150)
+
+    file_path = os.path.join(OUTPUT_DIR, f'scenariusz_{scenario}_ranking.png')
+    plt.savefig(file_path, dpi=150)
+    print(f"Zapisano: {file_path}")
     plt.show()
 
-    print("\nGotowe! Wygenerowano wykresy i zapisano jako pliki PNG.")
+    print("\nGotowe! Wszystkie pliki są w folderze 'wykresy_symulacja'.")
+
+    # =========================================================================
+    # EKSPORT TABELI LATEX
+    # =========================================================================
+
+    # 1. Zbieramy błędy w słownik dla wygody iteracji
+    errors_dict = {
+        'Algorytm Pluralny': err_plurality,
+        'Średnia Ważona': err_weighted,
+        'Dynamiczny (Bron)': err_dynamic,
+        'N-z-M': err_nzm,
+        'Wygładzający': err_smooth
+    }
+
+    # 2. Tworzymy ścieżkę do pliku tekstowego z kodem tabeli
+    latex_filename = os.path.join(OUTPUT_DIR, f'tabela_latex_scenariusz_{scenario}.txt')
+
+    # 3. Generujemy kod LaTeX
+    with open(latex_filename, mode='w', encoding='utf-8') as f:
+        f.write("% --- KOD DO WKLEJENIA DO LATEXA ---\n")
+        f.write("\\begin{table}[h!]\n")
+        f.write("\\centering\n")
+        f.write(f"\\caption{{Zestawienie błędów dla scenariusza: {title_text}}}\n")
+        f.write(f"\\label{{tab:wyniki_scenariusz_{scenario}}}\n")
+
+        # Definicja kolumn: | Nazwa | MSE | MAE | Max | Std Dev |
+        f.write("\\begin{tabular}{|l|c|c|c|c|}\n")
+        f.write("\\hline\n")
+        f.write(
+            "\\textbf{Algorytm} & \\textbf{MSE} & \\textbf{MAE} & \\textbf{Max Błąd} & \\textbf{Odch. Std} \\\\ \\hline\n")
+
+        for name, vector in errors_dict.items():
+            # Obliczenia metryk
+            mse_val = np.mean(vector ** 2)
+            mae_val = np.mean(np.abs(vector))  # Średni błąd bezwzględny
+            max_val = np.max(np.abs(vector))  # Największe odchylenie
+            std_val = np.std(vector)  # Stabilność
+
+            # Zapis wiersza tabeli (formatowanie do 4 miejsc po przecinku)
+            row = f"{name} & {mse_val:.4f} & {mae_val:.4f} & {max_val:.4f} & {std_val:.4f} \\\\ \\hline\n"
+            f.write(row)
+
+        f.write("\\end{tabular}\n")
+        f.write("\\end{table}\n")
+
+    print(f"\n[INFO] Wygenerowano kod tabeli LaTeX: {latex_filename}")
