@@ -74,39 +74,139 @@ def weighted_average_dynamic_bron(sensor_values, a=10.0):
     return np.sum(w * x)
 
 
-def n_z_m_voter(sensor_values, m_to_keep=2):
+def advanced_m_out_of_n_voter(readings, weights, threshold_m, threshold_tau, threshold_gamma, previous_result=None):
     """
-    4. N-z-M Voter (Trimmed Mean).
-    Odrzuca skrajne wartości i liczy średnią z M środkowych.
+    Implementacja Advanced M-out-of-N Voting Algorithm na podstawie:
+    "A Novel N-Input Voting Algorithm for X-by-Wire Fault-Tolerant Systems" (Algorithm 1).
+
+    Parametry:
+    - readings: lista odczytów z sensorów [x1, x2, ...]
+    - weights: wagi sensorów [v1, v2, ...]
+    - threshold_m: próg sumy wag wymagany do akceptacji (M)
+    - threshold_tau: próg zgodności (tolerancja) do grupowania (tau)
+    - threshold_gamma: próg ciągłości względem poprzedniego wyniku (gamma)
+    - previous_result: wynik systemu z poprzedniego cyklu (dla Fazy 2)
     """
-    n = len(sensor_values)
-    if m_to_keep >= n:
-        return np.mean(sensor_values)
+    n = len(readings)
 
-    sorted_vals = np.sort(sensor_values)
+    # --- FAZA 1: Głosowanie w grupach (Exact/Inexact Voting) ---
+    # Algorytm z papieru używa "slotów". Dla N=3 uprościmy to do bezpośredniego grupowania.
+    # Każdy 'slot' to reprezentant grupy (object_j) i suma wag (tally_j).
 
-    # Ile odrzucić łącznie
-    to_remove = n - m_to_keep
-    # Ile z dołu, ile z góry
-    cut_low = to_remove // 2
-    cut_high = n - (to_remove - cut_low)
+    slots_objects = []  # Reprezentanci grup
+    slots_tallies = []  # Sumy wag w grupach
 
-    # Wybieramy środek
-    selected = sorted_vals[cut_low:cut_high]
+    # Krok 1: Budowanie grup (uproszczona wersja linii 1-15 dla małego N)
+    for i in range(n):
+        x_i = readings[i]
+        v_i = weights[i]
 
-    return np.mean(selected)
+        found_group = False
+        for j in range(len(slots_objects)):
+            # Sprawdzamy czy x_i pasuje do istniejącej grupy (odległość <= tau)
+            if abs(x_i - slots_objects[j]) <= threshold_tau:
+                slots_tallies[j] += v_i
+                found_group = True
+                break
 
+        if not found_group:
+            # Tworzymy nową grupę
+            slots_objects.append(x_i)
+            slots_tallies.append(v_i)
 
-def smoothing_voter(sensor_values, previous_result, alpha=0.25):
-    """
-    5. Smoothing Voter (Wygładzający).
-    Łączy obecną medianę z poprzednim wynikiem (pamięć).
-    """
-    current_estimate = np.median(sensor_values)
+    # Krok 2: Sprawdzenie progu M (linie 16-19)
+    # Szukamy grupy, która ma sumę wag >= M
+    for j in range(len(slots_objects)):
+        if slots_tallies[j] >= threshold_m:
+            return slots_objects[j]  # Sukces w fazie 1: Zwracamy reprezentanta grupy
+
+    # --- FAZA 2: Weryfikacja historyczna (linie 21-26) ---
+    # Jeśli nie ma zgody w Fazie 1, sprawdzamy spójność z historią.
 
     if previous_result is None:
-        return current_estimate
+        return 0.0  # Brak historii i brak zgody -> Benign output / Fail-safe (tutaj 0.0)
 
-    # Filtr dolnoprzepustowy (Exponential Smoothing)
-    result = alpha * current_estimate + (1 - alpha) * previous_result
-    return result
+    # Obliczamy odległości wszystkich wejść od poprzedniego wyniku
+    distances = [abs(x - previous_result) for x in readings]
+
+    # Znajdujemy minimalną odległość
+    min_dist = min(distances)
+    min_index = distances.index(min_dist)
+
+    # Jeśli najbliższy sensor jest w granicach gammy, ufamy mu
+    if min_dist <= threshold_gamma:
+        return readings[min_index]
+
+    # --- FAZA 3: Brak rozstrzygnięcia ---
+    # Zgodnie z papierem: "voter fails to produce output... benign output"
+    # W symulacji najlepiej zwrócić poprzednią wartość (hold) lub 0.
+    return previous_result
+
+
+import numpy as np
+
+
+# --- POMOCNICZA FUNKCJA DO SZUKANIA GRUP (używana w Plurality i Smoothing) ---
+def find_majority_group(readings, tolerance):
+    """
+    Pomocnicza funkcja szukająca grupy większościowej (Majority/Consensus).
+    Zwraca (Success, Value). Success = True jeśli znaleziono grupę > N/2.
+    """
+    n = len(readings)
+    # Proste grupowanie (jak w Plurality)
+    for i in range(n):
+        group_indices = [i]
+        for j in range(n):
+            if i == j: continue
+            if abs(readings[i] - readings[j]) <= tolerance:
+                group_indices.append(j)
+
+        # Sprawdzenie warunku większości (zgodnie z art. Majority > N/2)
+        # Dla N=3 potrzeba 2 zgodnych.
+        if len(group_indices) > n / 2:
+            # Zwracamy średnią z grupy jako wynik
+            group_vals = [readings[k] for k in group_indices]
+            return True, np.mean(group_vals)
+
+    return False, 0.0
+
+
+def smoothing_voter(readings, previous_result, threshold_majority_epsilon, threshold_smoothing_beta):
+    """
+    Implementacja Smoothing Voter zgodnie z artykułem:
+    "Smoothing voter: a novel voting algorithm..." (Latif-Shabgahi et al., 2003).
+
+    Zasada (sekcja 3.1 artykułu):
+    1. Sprawdź, czy istnieje większość (Majority) z progiem epsilon.
+    2. Jeśli TAK -> Zwróć wynik większości.
+    3. Jeśli NIE (Complete Disagreement) -> Znajdź wynik najbliższy previous_result.
+    4. Jeśli odległość <= beta -> Zwróć ten wynik.
+    5. W przeciwnym razie -> Brak wyniku (zwracamy previous lub 0).
+    """
+
+    # KROK 1: Sprawdzenie Większości (Steps S3-S4 w artykule)
+    has_majority, majority_val = find_majority_group(readings, threshold_majority_epsilon)
+
+    if has_majority:
+        return majority_val  # Priorytet ma zawsze zgoda sensorów!
+
+    # KROK 2: Wygładzanie historyczne (Step S5-S6 w artykule)
+    # Uruchamiane TYLKO gdy nie ma zgody między sensorami.
+
+    if previous_result is None:
+        # Jeśli to pierwszy krok i brak zgody -> np. średnia (lub 0)
+        return np.mean(readings)
+
+    # Szukamy sensora najbliższego historii
+    distances = [abs(x - previous_result) for x in readings]
+    min_dist = min(distances)
+    min_index = distances.index(min_dist)
+    candidate_value = readings[min_index]
+
+    # Sprawdzenie progu wygładzania (Beta)
+    if min_dist <= threshold_smoothing_beta:
+        return candidate_value
+    else:
+        # Voter fails to produce output (w artykule: "no result").
+        # W symulacji utrzymujemy poprzednią wartość (fail-safe hold).
+        return previous_result
