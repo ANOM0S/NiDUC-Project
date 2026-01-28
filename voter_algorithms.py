@@ -62,10 +62,8 @@ def weighted_average_dynamic_bron(sensor_values, a=10.0):
                 S[i] += abs(x[i] - x[j])
 
     # Wagi surowe (odwrotność odległości)
-    # Dodajemy 'a' w mianowniku, żeby nie dzielić przez zero
     w_raw = 1.0 / (a + S)
 
-    # Normalizacja wag do jedynki
     if np.sum(w_raw) == 0:
         w = np.ones(N) / N
     else:
@@ -76,8 +74,7 @@ def weighted_average_dynamic_bron(sensor_values, a=10.0):
 
 def advanced_m_out_of_n_voter(readings, weights, threshold_m, threshold_tau, threshold_gamma, previous_result=None):
     """
-    Implementacja Advanced M-out-of-N Voting Algorithm na podstawie:
-    "A Novel N-Input Voting Algorithm for X-by-Wire Fault-Tolerant Systems" (Algorithm 1).
+    Advanced M-out-of-N Voting Algorithm
 
     Parametry:
     - readings: lista odczytów z sensorów [x1, x2, ...]
@@ -143,9 +140,6 @@ def advanced_m_out_of_n_voter(readings, weights, threshold_m, threshold_tau, thr
     return previous_result
 
 
-import numpy as np
-
-
 # --- POMOCNICZA FUNKCJA DO SZUKANIA GRUP (używana w Plurality i Smoothing) ---
 def find_majority_group(readings, tolerance):
     """
@@ -173,15 +167,14 @@ def find_majority_group(readings, tolerance):
 
 def smoothing_voter(readings, previous_result, threshold_majority_epsilon, threshold_smoothing_beta):
     """
-    Implementacja Smoothing Voter zgodnie z artykułem:
-    "Smoothing voter: a novel voting algorithm..." (Latif-Shabgahi et al., 2003).
+    Smoothing Voter zgodnie z artykułem:
 
-    Zasada (sekcja 3.1 artykułu):
+    Zasada:
     1. Sprawdź, czy istnieje większość (Majority) z progiem epsilon.
     2. Jeśli TAK -> Zwróć wynik większości.
-    3. Jeśli NIE (Complete Disagreement) -> Znajdź wynik najbliższy previous_result.
+    3. Jeśli NIE -> Znajdź wynik najbliższy previous_result.
     4. Jeśli odległość <= beta -> Zwróć ten wynik.
-    5. W przeciwnym razie -> Brak wyniku (zwracamy previous lub 0).
+    5. W przeciwnym razie -> Brak wyniku (zwracamy previous).
     """
 
     # KROK 1: Sprawdzenie Większości (Steps S3-S4 w artykule)
@@ -190,7 +183,7 @@ def smoothing_voter(readings, previous_result, threshold_majority_epsilon, thres
     if has_majority:
         return majority_val  # Priorytet ma zawsze zgoda sensorów!
 
-    # KROK 2: Wygładzanie historyczne (Step S5-S6 w artykule)
+    # KROK 2: Wygładzanie historyczne
     # Uruchamiane TYLKO gdy nie ma zgody między sensorami.
 
     if previous_result is None:
@@ -207,6 +200,4 @@ def smoothing_voter(readings, previous_result, threshold_majority_epsilon, thres
     if min_dist <= threshold_smoothing_beta:
         return candidate_value
     else:
-        # Voter fails to produce output (w artykule: "no result").
-        # W symulacji utrzymujemy poprzednią wartość (fail-safe hold).
         return previous_result

@@ -1,5 +1,5 @@
 import matplotlib
-matplotlib.use('TkAgg') # Odkomentuj jeśli wykresy nie wyskakują
+matplotlib.use('TkAgg')
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -7,12 +7,12 @@ import os
 import sensor_model
 import voter_algorithms as va
 
-# Parametry dla Smoothing Voter (wg artykułu)
-SMOOTHING_EPSILON = 0.2  # Próg zgody dla większości (Step S4)
-SMOOTHING_BETA = 0.35     # Próg ciągłości historycznej (Step S6)
+# Parametry dla Smoothing Voter
+SMOOTHING_EPSILON = 0.2  # Próg zgody dla większości
+SMOOTHING_BETA = 0.35     # Próg ciągłości historycznej
 
-# --- KONFIGURACJA ESTETYKI ---
-plt.rcParams['font.family'] = 'sans-serif'  # Czytelna czcionka
+# --- KONFIGURACJA wizualna ---
+plt.rcParams['font.family'] = 'sans-serif'
 plt.rcParams['font.size'] = 10
 plt.rcParams['axes.grid'] = True
 plt.rcParams['grid.alpha'] = 0.5
@@ -34,12 +34,12 @@ if __name__ == '__main__':
     # Pluralny
     TOLERANCE_PLURALITY = 0.3
 
-    # Zaawansowany M-z-N (wg artykułu)
+    # Zaawansowany M-z-N
     # Dla 3 sensorów po 0.33 wagi:
     # M powinno być np. 0.5 (żeby 2 sensory wystarczyły: 0.33+0.33 = 0.66 > 0.5)
     NZM_THRESHOLD_M = 0.5
-    NZM_TOLERANCE_TAU = 0.4  # 'tau' z artykułu (zgodność w grupie)
-    NZM_THRESHOLD_GAMMA = 0.5  # 'gamma' z artykułu (ciągłość historyczna)
+    NZM_TOLERANCE_TAU = 0.4
+    NZM_THRESHOLD_GAMMA = 0.5
 
     print(
         '''
@@ -136,7 +136,7 @@ if __name__ == '__main__':
         fault_scenarios=test_scenarios
     )
 
-    # --- OBLICZENIA VOTERÓW (BEZSTANOWE) ---
+    # --- OBLICZENIA VOTERÓW ---
     res_plurality = va.formalized_plurality_voter(data, tolerance=TOLERANCE_PLURALITY)
     res_weighted_static = va.weighted_average_voter(data, weights=STATIC_WEIGHTS)
 
@@ -147,12 +147,12 @@ if __name__ == '__main__':
 
     # Zmienne pamięci
     prev_val_smooth = 0.0
-    prev_val_nzm = 0.0  # Startujemy od 0
+    prev_val_nzm = 0.0
 
     for t_idx in range(TIME_POINTS):
         readings = data[:, t_idx]
 
-        # 1. Zaawansowany M-z-N (Advanced M-out-of-N)
+        # 1. Zaawansowany M-z-N
         val_nzm = va.advanced_m_out_of_n_voter(
             readings,
             weights=STATIC_WEIGHTS,
@@ -164,7 +164,7 @@ if __name__ == '__main__':
         prev_val_nzm = val_nzm
         res_nzm.append(val_nzm)
 
-        # 2. Wygładzający (Smoothing)
+        # 2. Wygładzający
         val_smooth = va.smoothing_voter(
             readings,
             previous_result=prev_val_smooth,
@@ -271,7 +271,7 @@ if __name__ == '__main__':
     names = list(mse_values.keys())
     values = list(mse_values.values())
 
-    # Kolorowanie słupków (Najlepszy = Zielony)
+    # Kolorowanie słupków
     best_idx = np.argmin(values)
     colors = ['skyblue'] * len(names)
     colors[best_idx] = 'forestgreen'
